@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { readWorkspaceJson, readWorkspaceFile, listDir } from '@/lib/workspace';
+import { convexQuery, api } from '@/lib/convex-fallback';
 import type { AgentInfo } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -18,7 +19,19 @@ export async function GET() {
     return NextResponse.json({ agents: enriched, count: enriched.length });
   }
 
-  // Fallback: scan agents directory
+  // Fallback to Convex
+  const convexAgents = await convexQuery<any[]>(api.sync.getAgentStatus);
+  if (convexAgents && convexAgents.length > 0) {
+    const agents = convexAgents.map(a => ({
+      id: a.agentId, name: a.name, model: a.model, status: a.status,
+      role: a.role, level: a.level, channels: a.channels,
+      capabilities: a.capabilities, description: a.description,
+      cron_jobs: a.cronJobs, soul: a.soul, rules: a.rules,
+    }));
+    return NextResponse.json({ agents, count: agents.length });
+  }
+
+  // Final fallback: scan agents directory
   const dirs = await listDir('agents');
   const agents: AgentInfo[] = [];
   for (const dir of dirs) {
@@ -27,10 +40,7 @@ export async function GET() {
     agents.push({
       id: dir,
       name: dir.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-      role: 'Agent',
-      model: 'unknown',
-      level: 'L1',
-      status: 'idle',
+      role: 'Agent', model: 'unknown', level: 'L1', status: 'idle',
       soul: soul || undefined,
     });
   }

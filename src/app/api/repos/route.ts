@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { readdir, stat, readFile } from 'fs/promises';
 import { join } from 'path';
 import { execSync } from 'child_process';
+import { convexQuery, api } from '@/lib/convex-fallback';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,6 +59,21 @@ export async function GET() {
       } catch { /* git command failed */ }
     }
   } catch { /* can't read projects dir */ }
+
+  // Fallback to Convex if no local repos found
+  if (repos.length === 0) {
+    const convexRepos = await convexQuery<any[]>(api.sync.getRepos);
+    if (convexRepos && convexRepos.length > 0) {
+      return NextResponse.json({
+        repos: convexRepos.map(r => ({
+          name: r.name, path: r.path, branch: r.branch,
+          lastCommit: r.lastCommit, lastCommitDate: r.lastCommitDate,
+          dirtyFiles: r.dirtyFiles || 0, languages: r.languages || {},
+        })),
+        count: convexRepos.length,
+      });
+    }
+  }
 
   return NextResponse.json({ repos, count: repos.length });
 }

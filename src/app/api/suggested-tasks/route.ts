@@ -1,11 +1,25 @@
 import { NextResponse } from 'next/server';
 import { readWorkspaceJson, writeWorkspaceFile } from '@/lib/workspace';
+import { convexQuery, api } from '@/lib/convex-fallback';
 import type { SuggestedTask } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const tasks = await readWorkspaceJson<SuggestedTask[]>('state/suggested-tasks.json');
+  let tasks = await readWorkspaceJson<SuggestedTask[]>('state/suggested-tasks.json');
+
+  if (!tasks) {
+    const convexTasks = await convexQuery<any[]>(api.sync.getSuggestedTasks);
+    if (convexTasks) {
+      tasks = convexTasks.map(t => ({
+        id: String(t.taskId), title: t.title, category: t.category,
+        reasoning: t.reasoning, nextAction: t.nextAction,
+        priority: t.priority, effort: t.effort, status: t.status,
+        createdAt: t.createdAt,
+      })) as SuggestedTask[];
+    }
+  }
+
   return NextResponse.json({ tasks: tasks || [] });
 }
 

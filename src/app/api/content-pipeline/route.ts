@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { readWorkspaceFile } from '@/lib/workspace';
+import { convexQuery, api } from '@/lib/convex-fallback';
 import type { ContentItem } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -65,7 +66,13 @@ function parseQueueMd(content: string): ContentItem[] {
 }
 
 export async function GET() {
-  const queueMd = await readWorkspaceFile('content/queue.md');
+  let queueMd = await readWorkspaceFile('content/queue.md');
+
+  if (!queueMd) {
+    const state = await convexQuery<any>(api.sync.getSystemState, { key: 'contentQueue' });
+    if (state?.value) queueMd = state.value;
+  }
+
   const items = queueMd ? parseQueueMd(queueMd) : [];
 
   const counts = {
